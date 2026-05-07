@@ -8,14 +8,14 @@ import HelpModal from './components/HelpModal'
 import LoadingSpinner from './components/LoadingSpinner'
 import { db } from './utils/db'
 import { litDB } from './utils/supabase'
+import { exportToCSV } from './utils/csvExporter'
 
 export default function App({ user, onSignOut }) {
   const [literatures, setLiteratures] = useState([])
   const [selected, setSelected] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeTagFilters, setActiveTagFilters] = useState([])
+  const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [editingLit, setEditingLit] = useState(null)
   const [showCSVModal, setShowCSVModal] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
@@ -29,21 +29,18 @@ export default function App({ user, onSignOut }) {
 
   if (dataLoading) return <LoadingSpinner />
 
-  const allTags = [...new Set(literatures.flatMap(l => l.tags || []))]
+  const favoriteCount = literatures.filter(l => l.favorite).length
 
   const filtered = literatures.filter(lit => {
+    if (favoriteOnly && !lit.favorite) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       const hit =
         lit.title?.toLowerCase().includes(q) ||
         lit.authors?.some(a => a.toLowerCase().includes(q)) ||
-        lit.keywords?.some(k => k.toLowerCase().includes(q)) ||
         lit.journal?.toLowerCase().includes(q) ||
         lit.notes?.toLowerCase().includes(q)
       if (!hit) return false
-    }
-    if (activeTagFilters.length > 0) {
-      if (!activeTagFilters.every(t => lit.tags?.includes(t))) return false
     }
     return true
   })
@@ -53,9 +50,10 @@ export default function App({ user, onSignOut }) {
     setSelected(prev => prev?.id === updated.id ? updated : prev)
   }
 
-  const handleAdd = async lit => {
+  const handleAdd = async ({ lit, pdfFile }) => {
     try {
       await litDB.insert(lit, user.id)
+      if (pdfFile) await db.savePDF(lit.id, pdfFile)
       setLiteratures(prev => [lit, ...prev])
       setSelected(lit)
       setShowAddModal(false)
@@ -64,11 +62,10 @@ export default function App({ user, onSignOut }) {
     }
   }
 
-  const handleEdit = async lit => {
+  const handleUpdate = async lit => {
     try {
       await litDB.update(lit, user.id)
       updateLit(lit)
-      setEditingLit(null)
     } catch {
       setError('文献の更新に失敗しました。')
     }
@@ -82,6 +79,18 @@ export default function App({ user, onSignOut }) {
       if (selected?.id === id) setSelected(null)
     } catch {
       setError('文献の削除に失敗しました。')
+    }
+  }
+
+  const handleToggleFavorite = async (id, value) => {
+    const lit = literatures.find(l => l.id === id)
+    if (!lit) return
+    const updated = { ...lit, favorite: value, updatedAt: Date.now() }
+    try {
+      await litDB.update(updated, user.id)
+      updateLit(updated)
+    } catch {
+      setError('お気に入りの更新に失敗しました。')
     }
   }
 
@@ -106,13 +115,22 @@ export default function App({ user, onSignOut }) {
         <div className="flex-1 max-w-xl">
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
         </div>
-        <div className="flex gap-2 ml-auto shrink-0">
+        <span className="text-xs text-gray-400 shrink-0 whitespace-nowrap">
+          全{literatures.length}件 / お気に入り{favoriteCount}件
+        </span>
+        <div className="flex gap-2 shrink-0">
           <button
             onClick={() => setShowHelp(true)}
             className="px-3 py-1.5 text-sm text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             title="使い方"
           >
             ? 使い方
+          </button>
+          <button
+            onClick={() => exportToCSV(literatures)}
+            className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            CSVエクスポート
           </button>
           <button
             onClick={() => setShowCSVModal(true)}
@@ -148,29 +166,21 @@ export default function App({ user, onSignOut }) {
         <LiteratureList
           literatures={filtered}
           selected={selected}
-          allTags={allTags}
-          activeTagFilters={activeTagFilters}
-          onTagFiltersChange={setActiveTagFilters}
+          favoriteOnly={favoriteOnly}
+          onFavoriteOnlyChange={setFavoriteOnly}
           onSelect={setSelected}
+          onToggleFavorite={handleToggleFavorite}
           totalCount={literatures.length}
         />
         <LiteratureDetail
           literature={selected}
-          onEdit={setEditingLit}
           onDelete={handleDelete}
-          onUpdateLit={updateLit}
+          onUpdate={handleUpdate}
         />
       </div>
 
       {showAddModal && (
         <AddEditModal onSave={handleAdd} onClose={() => setShowAddModal(false)} />
-      )}
-      {editingLit && (
-        <AddEditModal
-          literature={editingLit}
-          onSave={handleEdit}
-          onClose={() => setEditingLit(null)}
-        />
       )}
       {showCSVModal && (
         <CSVImportModal onImport={handleImportCSV} onClose={() => setShowCSVModal(false)} />

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 const INPUT_CLASS =
   'w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
 
-function TagInput({ label, value, onChange, placeholder, colorClass = 'bg-blue-100 text-blue-800' }) {
+function TagInput({ label, value, onChange, placeholder, colorClass = 'bg-purple-100 text-purple-800' }) {
   const [input, setInput] = useState('')
 
   const addTag = () => {
@@ -55,21 +55,21 @@ function TagInput({ label, value, onChange, placeholder, colorClass = 'bg-blue-1
   )
 }
 
-export default function AddEditModal({ literature, onSave, onClose }) {
-  const isEdit = !!literature
+export default function AddEditModal({ onSave, onClose }) {
   const titleRef = useRef()
+  const fileRef = useRef()
 
   const [form, setForm] = useState({
-    title:    literature?.title    ?? '',
-    authors:  literature?.authors  ?? [],
-    year:     literature?.year     ?? '',
-    journal:  literature?.journal  ?? '',
-    keywords: literature?.keywords ?? [],
-    tags:     literature?.tags     ?? [],
-    notes:    literature?.notes    ?? '',
-    url:      literature?.url      ?? '',
+    title:   '',
+    authors: [],
+    year:    '',
+    journal: '',
+    notes:   '',
+    url:     '',
   })
   const [errors, setErrors] = useState({})
+  const [pdfFile, setPdfFile] = useState(null)
+  const [draggingPdf, setDraggingPdf] = useState(false)
 
   useEffect(() => {
     titleRef.current?.focus()
@@ -82,6 +82,17 @@ export default function AddEditModal({ literature, onSave, onClose }) {
   }, [onClose])
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }))
+
+  const handlePdfSelect = file => {
+    if (file?.type === 'application/pdf') setPdfFile(file)
+  }
+
+  const handleDrop = e => {
+    e.preventDefault()
+    setDraggingPdf(false)
+    const file = [...e.dataTransfer.files].find(f => f.type === 'application/pdf')
+    if (file) setPdfFile(file)
+  }
 
   const validate = () => {
     const errs = {}
@@ -97,24 +108,23 @@ export default function AddEditModal({ literature, onSave, onClose }) {
     return Object.keys(errs).length === 0
   }
 
-  const handleSubmit = e => {
-    e?.preventDefault()
+  const handleSubmit = () => {
     if (!validate()) return
     const now = Date.now()
-    onSave({
-      id:        literature?.id ?? crypto.randomUUID(),
+    const lit = {
+      id:        crypto.randomUUID(),
       title:     form.title.trim(),
       authors:   form.authors,
       year:      form.year !== '' ? parseInt(form.year) : null,
       journal:   form.journal.trim(),
-      keywords:  form.keywords,
-      tags:      form.tags,
       notes:     form.notes.trim(),
       url:       form.url.trim(),
-      pdfName:   literature?.pdfName ?? null,
-      createdAt: literature?.createdAt ?? now,
+      pdfName:   pdfFile?.name ?? null,
+      favorite:  false,
+      createdAt: now,
       updatedAt: now,
-    })
+    }
+    onSave({ lit, pdfFile })
   }
 
   return (
@@ -125,9 +135,7 @@ export default function AddEditModal({ literature, onSave, onClose }) {
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-base font-semibold text-gray-800">
-            {isEdit ? '文献を編集' : '文献を追加'}
-          </h2>
+          <h2 className="text-base font-semibold text-gray-800">文献を追加</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
@@ -180,7 +188,7 @@ export default function AddEditModal({ literature, onSave, onClose }) {
               {errors.year && <p className="text-xs text-red-500 mt-0.5">{errors.year}</p>}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">ジャーナル / 会議</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">出典（ジャーナル / 会議）</label>
               <input
                 type="text"
                 value={form.journal}
@@ -204,33 +212,54 @@ export default function AddEditModal({ literature, onSave, onClose }) {
             {errors.url && <p className="text-xs text-red-500 mt-0.5">{errors.url}</p>}
           </div>
 
-          {/* Keywords */}
-          <TagInput
-            label="キーワード"
-            value={form.keywords}
-            onChange={v => set('keywords', v)}
-            placeholder="キーワードを入力してEnter"
-            colorClass="bg-emerald-100 text-emerald-800"
-          />
-
-          {/* Tags */}
-          <TagInput
-            label="タグ"
-            value={form.tags}
-            onChange={v => set('tags', v)}
-            placeholder="タグを入力してEnter"
-            colorClass="bg-blue-100 text-blue-800"
-          />
-
           {/* Notes */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">メモ</label>
             <textarea
               value={form.notes}
               onChange={e => set('notes', e.target.value)}
-              className={`${INPUT_CLASS} h-28 resize-none`}
+              className={`${INPUT_CLASS} h-24 resize-none`}
               placeholder="概要・感想・参照箇所など"
             />
+          </div>
+
+          {/* PDF upload */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">PDF（任意）</label>
+            {pdfFile ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md">
+                <span className="text-sm text-blue-700 flex-1 truncate">📄 {pdfFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setPdfFile(null)}
+                  className="text-xs text-red-400 hover:text-red-600"
+                >
+                  削除
+                </button>
+              </div>
+            ) : (
+              <div
+                onDragOver={e => { e.preventDefault(); setDraggingPdf(true) }}
+                onDragLeave={() => setDraggingPdf(false)}
+                onDrop={handleDrop}
+                onClick={() => fileRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                  draggingPdf
+                    ? 'border-blue-400 bg-blue-50'
+                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                }`}
+              >
+                <p className="text-sm text-gray-500">PDFをここにドロップ、またはクリックして選択</p>
+                <p className="text-xs text-gray-400 mt-1">.pdf のみ対応</p>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={e => { handlePdfSelect(e.target.files[0]); e.target.value = '' }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -248,7 +277,7 @@ export default function AddEditModal({ literature, onSave, onClose }) {
             onClick={handleSubmit}
             className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
           >
-            {isEdit ? '保存' : '追加'}
+            追加
           </button>
         </div>
       </div>

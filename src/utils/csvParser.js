@@ -3,8 +3,6 @@ const FIELD_ALIASES = {
   authors:  ['authors', '著者', 'author', 'writers', '著者名'],
   year:     ['year', '発行年', 'published year', 'publication year', '年', '出版年'],
   journal:  ['journal', 'ジャーナル', 'publication', 'venue', 'conference', '雑誌', '掲載誌', '出版元'],
-  keywords: ['keywords', 'キーワード', 'keyword'],
-  tags:     ['tags', 'タグ', 'tag', 'category', 'categories', 'label', 'labels'],
   notes:    ['notes', 'メモ', 'note', 'abstract', '概要', '備考', 'comments', 'memo', 'アブスト'],
   url:      ['url', 'link', 'リンク', 'doi', '論文url', '論文リンク', 'paper url', 'paper link'],
 }
@@ -76,11 +74,10 @@ export function parseCSV(text) {
       authors:  splitList(get('authors')),
       year:     parseInt(get('year')) || null,
       journal:  get('journal'),
-      keywords: splitList(get('keywords')),
-      tags:     splitList(get('tags')),
       notes:    get('notes'),
       url:      get('url'),
       pdfName:  null,
+      favorite: false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     })

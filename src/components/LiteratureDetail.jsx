@@ -1,11 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import PDFViewer from './PDFViewer'
 import { db } from '../utils/db'
 
-export default function LiteratureDetail({ literature, onEdit, onDelete, onUpdateLit }) {
-  const [tab, setTab] = useState('info')
-  const [pdfUrl, setPdfUrl] = useState(null)
+const INPUT_CLASS =
+  'w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-transparent bg-white'
 
+export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
+  const [splitRatio, setSplitRatio] = useState(45)
+  const [isDragging, setIsDragging] = useState(false)
+  const draggingRef = useRef(false)
+  const containerRef = useRef()
+
+  const [pdfUrl, setPdfUrl] = useState(null)
+  const [editForm, setEditForm] = useState(null)
+  const [isDirty, setIsDirty] = useState(false)
+
+  // PDF loading
   useEffect(() => {
     const state = { cancelled: false, url: null }
 
@@ -29,12 +39,72 @@ export default function LiteratureDetail({ literature, onEdit, onDelete, onUpdat
     }
   }, [literature?.id])
 
+  // Edit form: reset when selecting a different literature
+  useEffect(() => {
+    if (literature) {
+      setEditForm({
+        title:   literature.title ?? '',
+        authors: (literature.authors || []).join(', '),
+        year:    literature.year ?? '',
+        journal: literature.journal ?? '',
+        url:     literature.url ?? '',
+        notes:   literature.notes ?? '',
+      })
+      setIsDirty(false)
+    }
+  }, [literature?.id])
+
+  // Divider drag: window-level listeners to work over iframe
+  useEffect(() => {
+    const onMouseMove = e => {
+      if (!draggingRef.current || !containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const ratio = ((e.clientX - rect.left) / rect.width) * 100
+      setSplitRatio(Math.min(Math.max(ratio, 20), 80))
+    }
+    const onMouseUp = () => {
+      draggingRef.current = false
+      setIsDragging(false)
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [])
+
+  const startDrag = () => {
+    draggingRef.current = true
+    setIsDragging(true)
+  }
+
+  const setField = (field, value) => {
+    setEditForm(f => ({ ...f, [field]: value }))
+    setIsDirty(true)
+  }
+
+  const handleSave = () => {
+    const updated = {
+      ...literature,
+      title:   editForm.title.trim(),
+      authors: editForm.authors.split(',').map(s => s.trim()).filter(Boolean),
+      year:    editForm.year !== '' ? parseInt(editForm.year) || null : null,
+      journal: editForm.journal.trim(),
+      url:     editForm.url.trim(),
+      notes:   editForm.notes,
+      updatedAt: Date.now(),
+    }
+    onUpdate(updated)
+    setIsDirty(false)
+  }
+
   const handlePDFUpload = async file => {
     await db.savePDF(literature.id, file)
     if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     const url = URL.createObjectURL(file)
     setPdfUrl(url)
-    onUpdateLit({ ...literature, pdfName: file.name, updatedAt: Date.now() })
+    onUpdate({ ...literature, pdfName: file.name, updatedAt: Date.now() })
   }
 
   if (!literature) {
@@ -48,134 +118,145 @@ export default function LiteratureDetail({ literature, onEdit, onDelete, onUpdat
     )
   }
 
+  if (!editForm) return null
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-white">
-      {/* Tab bar */}
-      <div className="flex items-center border-b border-gray-200 px-4 shrink-0">
-        <div className="flex">
-          {[['info', '詳細情報'], ['pdf', 'PDF']].map(([key, label]) => (
+    <div
+      ref={containerRef}
+      className="flex-1 flex overflow-hidden bg-white"
+      style={{ cursor: isDragging ? 'col-resize' : 'auto', userSelect: isDragging ? 'none' : 'auto' }}
+    >
+      {/* Left pane: detail / inline edit */}
+      <div className="flex flex-col overflow-hidden" style={{ width: `${splitRatio}%` }}>
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 shrink-0">
+          <span className="text-xs font-medium text-gray-500">詳細情報</span>
+          <div className="flex items-center gap-2">
+            {isDirty && (
+              <button
+                onClick={handleSave}
+                className="px-3 py-1 text-xs text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+              >
+                保存
+              </button>
+            )}
             <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                tab === key
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              onClick={() => onDelete(literature.id)}
+              className="px-2 py-1 text-xs text-red-500 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
             >
-              {label}
-              {key === 'pdf' && !pdfUrl && (
-                <span className="ml-1 text-xs font-normal text-gray-400">(未登録)</span>
-              )}
+              削除
             </button>
-          ))}
+          </div>
         </div>
-        <div className="ml-auto flex gap-2 py-2">
-          <button
-            onClick={() => onEdit(literature)}
-            className="px-3 py-1 text-xs text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors"
-          >
-            編集
-          </button>
-          <button
-            onClick={() => onDelete(literature.id)}
-            className="px-3 py-1 text-xs text-red-500 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
-          >
-            削除
-          </button>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div>
+            <label className="block text-xs text-gray-400 mb-0.5">タイトル</label>
+            <input
+              type="text"
+              value={editForm.title}
+              onChange={e => setField('title', e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-0.5">著者（カンマ区切り）</label>
+            <input
+              type="text"
+              value={editForm.authors}
+              onChange={e => setField('authors', e.target.value)}
+              className={INPUT_CLASS}
+              placeholder="著者A, 著者B, ..."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-0.5">発行年</label>
+              <input
+                type="number"
+                value={editForm.year}
+                onChange={e => setField('year', e.target.value)}
+                className={INPUT_CLASS}
+                placeholder="2024"
+                min="1000"
+                max="2100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-0.5">出典</label>
+              <input
+                type="text"
+                value={editForm.journal}
+                onChange={e => setField('journal', e.target.value)}
+                className={INPUT_CLASS}
+                placeholder="Nature, ICML, ..."
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-0.5">URL / DOI</label>
+            <div className="flex gap-1">
+              <input
+                type="url"
+                value={editForm.url}
+                onChange={e => setField('url', e.target.value)}
+                className={`${INPUT_CLASS} flex-1`}
+                placeholder="https://..."
+              />
+              {editForm.url && (
+                <a
+                  href={editForm.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2 py-1 text-xs text-blue-500 border border-blue-200 rounded hover:bg-blue-50 shrink-0 whitespace-nowrap"
+                >
+                  開く
+                </a>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-0.5">メモ</label>
+            <textarea
+              value={editForm.notes}
+              onChange={e => setField('notes', e.target.value)}
+              className={`${INPUT_CLASS} resize-none`}
+              rows={10}
+              placeholder="読んだメモ、要点など..."
+            />
+          </div>
         </div>
       </div>
 
-      {tab === 'info' ? (
-        <DetailView literature={literature} />
-      ) : (
+      {/* Divider: wide hit area, thin visual line */}
+      <div
+        onMouseDown={startDrag}
+        className="w-3 relative flex items-stretch justify-center cursor-col-resize shrink-0 group"
+        title="ドラッグして幅を調整"
+      >
+        <div className={`w-0.5 transition-colors ${isDragging ? 'bg-blue-400' : 'bg-gray-200 group-hover:bg-blue-400'}`} />
+      </div>
+
+      {/* Right pane: PDF */}
+      <div className="flex flex-col overflow-hidden flex-1 relative">
+        <div className="px-4 py-2 border-b border-gray-200 shrink-0">
+          <span className="text-xs font-medium text-gray-500">PDF</span>
+        </div>
         <PDFViewer
           pdfUrl={pdfUrl}
           pdfName={literature.pdfName}
           onUpload={handlePDFUpload}
         />
-      )}
-    </div>
-  )
-}
-
-function DetailView({ literature }) {
-  const { title, authors, year, journal, keywords, tags, notes, url } = literature
-
-  return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <h2 className="text-xl font-bold text-gray-900 leading-tight">{title}</h2>
-
-      <div className="mt-6 space-y-4">
-        {authors?.length > 0 && (
-          <Row label="著者">
-            <span className="text-sm text-gray-700">{authors.join(', ')}</span>
-          </Row>
-        )}
-
-        {(year || journal) && (
-          <Row label="出典">
-            <span className="text-sm text-gray-700">
-              {[journal, year].filter(Boolean).join(', ')}
-            </span>
-          </Row>
-        )}
-
-        {url && (
-          <Row label="リンク">
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-blue-600 hover:text-blue-800 hover:underline break-all"
-            >
-              {url}
-            </a>
-          </Row>
-        )}
-
-        {keywords?.length > 0 && (
-          <Row label="キーワード">
-            <div className="flex flex-wrap gap-1">
-              {keywords.map(k => (
-                <span key={k} className="px-2 py-0.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
-                  {k}
-                </span>
-              ))}
-            </div>
-          </Row>
-        )}
-
-        {tags?.length > 0 && (
-          <Row label="タグ">
-            <div className="flex flex-wrap gap-1">
-              {tags.map(t => (
-                <span key={t} className="px-2 py-0.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full">
-                  {t}
-                </span>
-              ))}
-            </div>
-          </Row>
-        )}
-
-        {notes && (
-          <div>
-            <p className="text-xs font-medium text-gray-400 mb-1">メモ</p>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-4 border border-gray-100 leading-relaxed">
-              {notes}
-            </p>
-          </div>
+        {/* Transparent overlay during drag to prevent iframe from capturing mouse events */}
+        {isDragging && (
+          <div className="absolute inset-0 z-10" style={{ cursor: 'col-resize' }} />
         )}
       </div>
-    </div>
-  )
-}
-
-function Row({ label, children }) {
-  return (
-    <div className="flex gap-4">
-      <span className="w-20 shrink-0 text-xs font-medium text-gray-400 pt-0.5">{label}</span>
-      <div className="flex-1">{children}</div>
     </div>
   )
 }

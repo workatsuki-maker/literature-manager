@@ -1,16 +1,26 @@
-export default function LiteratureItem({ literature, isSelected, onClick }) {
-  const { title, authors, year, journal, tags } = literature
+export default function LiteratureItem({ literature, isSelected, onClick, onToggleFavorite }) {
+  const { title, authors, year, journal, favorite } = literature
 
   return (
     <div
       onClick={onClick}
-      className={`px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors select-none border-l-2 ${
+      className={`relative px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors select-none border-l-2 ${
         isSelected
           ? 'bg-blue-50 border-l-blue-500'
           : 'hover:bg-gray-50 border-l-transparent'
       }`}
     >
-      <div className={`text-sm font-medium leading-snug line-clamp-2 ${isSelected ? 'text-blue-900' : 'text-gray-800'}`}>
+      <button
+        onClick={e => { e.stopPropagation(); onToggleFavorite(literature.id, !favorite) }}
+        className={`absolute top-2.5 right-2 text-base leading-none transition-colors ${
+          favorite ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400'
+        }`}
+        title={favorite ? 'お気に入りを解除' : 'お気に入りに追加'}
+      >
+        ★
+      </button>
+
+      <div className={`text-sm font-medium leading-snug line-clamp-2 pr-5 ${isSelected ? 'text-blue-900' : 'text-gray-800'}`}>
         {title}
       </div>
 
@@ -28,19 +38,6 @@ export default function LiteratureItem({ literature, isSelected, onClick }) {
 
       {journal && (
         <div className="text-xs text-gray-400 truncate mt-0.5 italic">{journal}</div>
-      )}
-
-      {tags?.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {tags.slice(0, 3).map(tag => (
-            <span key={tag} className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">
-              {tag}
-            </span>
-          ))}
-          {tags.length > 3 && (
-            <span className="text-xs text-gray-400">+{tags.length - 3}</span>
-          )}
-        </div>
       )}
     </div>
   )
