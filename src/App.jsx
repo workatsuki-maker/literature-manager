@@ -4,6 +4,7 @@ import LiteratureList from './components/LiteratureList'
 import LiteratureDetail from './components/LiteratureDetail'
 import AddEditModal from './components/AddEditModal'
 import CSVImportModal from './components/CSVImportModal'
+import HelpModal from './components/HelpModal'
 import { db } from './utils/db'
 
 const STORAGE_KEY = 'refmanager_data'
@@ -24,6 +25,7 @@ export default function App() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingLit, setEditingLit] = useState(null)
   const [showCSVModal, setShowCSVModal] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
 
   useEffect(() => {
     try {
@@ -93,6 +95,13 @@ export default function App() {
         </div>
         <div className="flex gap-2 ml-auto shrink-0">
           <button
+            onClick={() => setShowHelp(true)}
+            className="px-3 py-1.5 text-sm text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            title="使い方"
+          >
+            ? 使い方
+          </button>
+          <button
             onClick={() => setShowCSVModal(true)}
             className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
@@ -138,6 +147,9 @@ export default function App() {
       )}
       {showCSVModal && (
         <CSVImportModal onImport={handleImportCSV} onClose={() => setShowCSVModal(false)} />
+      )}
+      {showHelp && (
+        <HelpModal onClose={() => setShowHelp(false)} />
       )}
     </div>
   )

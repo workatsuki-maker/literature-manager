@@ -6,6 +6,7 @@ const FIELD_ALIASES = {
   keywords: ['keywords', 'キーワード', 'keyword'],
   tags:     ['tags', 'タグ', 'tag', 'category', 'categories', 'label', 'labels'],
   notes:    ['notes', 'メモ', 'note', 'abstract', '概要', '備考', 'comments', 'memo', 'アブスト'],
+  url:      ['url', 'link', 'リンク', 'doi', '論文url', '論文リンク', 'paper url', 'paper link'],
 }
 
 function parseCSVLine(line) {
@@ -78,6 +79,7 @@ export function parseCSV(text) {
       keywords: splitList(get('keywords')),
       tags:     splitList(get('tags')),
       notes:    get('notes'),
+      url:      get('url'),
       pdfName:  null,
       createdAt: Date.now(),
       updatedAt: Date.now(),

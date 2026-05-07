@@ -67,6 +67,7 @@ export default function AddEditModal({ literature, onSave, onClose }) {
     keywords: literature?.keywords ?? [],
     tags:     literature?.tags     ?? [],
     notes:    literature?.notes    ?? '',
+    url:      literature?.url      ?? '',
   })
   const [errors, setErrors] = useState({})
 
@@ -89,6 +90,9 @@ export default function AddEditModal({ literature, onSave, onClose }) {
       const y = Number(form.year)
       if (isNaN(y) || y < 1000 || y > 2100) errs.year = '1000〜2100の年を入力してください'
     }
+    if (form.url.trim() && !/^https?:\/\/.+/.test(form.url.trim())) {
+      errs.url = 'http:// または https:// から始まるURLを入力してください'
+    }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -106,6 +110,7 @@ export default function AddEditModal({ literature, onSave, onClose }) {
       keywords:  form.keywords,
       tags:      form.tags,
       notes:     form.notes.trim(),
+      url:       form.url.trim(),
       pdfName:   literature?.pdfName ?? null,
       createdAt: literature?.createdAt ?? now,
       updatedAt: now,
@@ -184,6 +189,19 @@ export default function AddEditModal({ literature, onSave, onClose }) {
                 placeholder="Nature, ICML, ..."
               />
             </div>
+          </div>
+
+          {/* URL */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">URL / DOI リンク</label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={e => set('url', e.target.value)}
+              className={INPUT_CLASS}
+              placeholder="https://doi.org/10.xxxx/... または論文ページのURL"
+            />
+            {errors.url && <p className="text-xs text-red-500 mt-0.5">{errors.url}</p>}
           </div>
 
           {/* Keywords */}

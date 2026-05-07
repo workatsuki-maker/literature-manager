@@ -100,7 +100,7 @@ export default function LiteratureDetail({ literature, onEdit, onDelete, onUpdat
 }
 
 function DetailView({ literature }) {
-  const { title, authors, year, journal, keywords, tags, notes } = literature
+  const { title, authors, year, journal, keywords, tags, notes, url } = literature
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -118,6 +118,19 @@ function DetailView({ literature }) {
             <span className="text-sm text-gray-700">
               {[journal, year].filter(Boolean).join(', ')}
             </span>
+          </Row>
+        )}
+
+        {url && (
+          <Row label="リンク">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-600 hover:text-blue-800 hover:underline break-all"
+            >
+              {url}
+            </a>
           </Row>
         )}
 
