@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import PDFViewer from './PDFViewer'
 import { db } from '../utils/db'
 
 const INPUT_CLASS =
   'w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-transparent bg-white'
+
+const AUTOSAVE_DELAY = 1500
 
 export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
   const [splitRatio, setSplitRatio] = useState(45)
@@ -13,7 +15,10 @@ export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
 
   const [pdfUrl, setPdfUrl] = useState(null)
   const [editForm, setEditForm] = useState(null)
-  const [isDirty, setIsDirty] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('idle') // 'idle' | 'pending' | 'saving' | 'saved'
+  const debounceRef = useRef(null)
+  const pendingFormRef = useRef(null)
+  const literatureRef = useRef(literature)
 
   // PDF loading
   useEffect(() => {
@@ -39,9 +44,21 @@ export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
     }
   }, [literature?.id])
 
-  // Edit form: reset when selecting a different literature
+  // Keep literatureRef in sync for use in callbacks
+  useEffect(() => { literatureRef.current = literature }, [literature])
+
+  // Edit form: reset when selecting a different literature (flush pending save first)
   useEffect(() => {
     if (literature) {
+      // If there was a pending auto-save for the previous item, flush it immediately
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+        debounceRef.current = null
+        if (pendingFormRef.current) {
+          onUpdate(pendingFormRef.current)
+          pendingFormRef.current = null
+        }
+      }
       setEditForm({
         title:   literature.title ?? '',
         authors: (literature.authors || []).join(', '),
@@ -50,9 +67,9 @@ export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
         url:     literature.url ?? '',
         notes:   literature.notes ?? '',
       })
-      setIsDirty(false)
+      setSaveStatus('idle')
     }
-  }, [literature?.id])
+  }, [literature?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Divider drag: window-level listeners to work over iframe
   useEffect(() => {
@@ -79,24 +96,38 @@ export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
     setIsDragging(true)
   }
 
-  const setField = (field, value) => {
-    setEditForm(f => ({ ...f, [field]: value }))
-    setIsDirty(true)
-  }
+  const buildUpdated = useCallback((form) => ({
+    ...literatureRef.current,
+    title:   form.title.trim(),
+    authors: form.authors.split(',').map(s => s.trim()).filter(Boolean),
+    year:    form.year !== '' ? parseInt(form.year) || null : null,
+    journal: form.journal.trim(),
+    url:     form.url.trim(),
+    notes:   form.notes,
+    updatedAt: Date.now(),
+  }), [])
 
-  const handleSave = () => {
-    const updated = {
-      ...literature,
-      title:   editForm.title.trim(),
-      authors: editForm.authors.split(',').map(s => s.trim()).filter(Boolean),
-      year:    editForm.year !== '' ? parseInt(editForm.year) || null : null,
-      journal: editForm.journal.trim(),
-      url:     editForm.url.trim(),
-      notes:   editForm.notes,
-      updatedAt: Date.now(),
-    }
-    onUpdate(updated)
-    setIsDirty(false)
+  const scheduleAutoSave = useCallback((form) => {
+    pendingFormRef.current = buildUpdated(form)
+    setSaveStatus('pending')
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      debounceRef.current = null
+      const toSave = pendingFormRef.current
+      pendingFormRef.current = null
+      setSaveStatus('saving')
+      await onUpdate(toSave)
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    }, AUTOSAVE_DELAY)
+  }, [buildUpdated, onUpdate])
+
+  const setField = (field, value) => {
+    setEditForm(f => {
+      const next = { ...f, [field]: value }
+      scheduleAutoSave(next)
+      return next
+    })
   }
 
   const handlePDFUpload = async file => {
@@ -131,14 +162,15 @@ export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 shrink-0">
           <span className="text-xs font-medium text-gray-500">詳細情報</span>
-          <div className="flex items-center gap-2">
-            {isDirty && (
-              <button
-                onClick={handleSave}
-                className="px-3 py-1 text-xs text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-              >
-                保存
-              </button>
+          <div className="flex items-center gap-3">
+            {saveStatus === 'pending' && (
+              <span className="text-xs text-gray-400">編集中...</span>
+            )}
+            {saveStatus === 'saving' && (
+              <span className="text-xs text-gray-400">保存中...</span>
+            )}
+            {saveStatus === 'saved' && (
+              <span className="text-xs text-green-500">✓ 保存済み</span>
             )}
             <button
               onClick={() => onDelete(literature.id)}
