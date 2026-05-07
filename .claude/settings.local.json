@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm install *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Copy-Item \"C:\\\\Users\\\\ogata\\\\claudecode_workplace\\\\literature-manager\\\\ChatGPT Image 2026年5月8日 00_04_14.png\" \"C:\\\\Users\\\\ogata\\\\claudecode_workplace\\\\literature-manager\\\\public\\\\favicon.png\")"
     ]
   }
 }
