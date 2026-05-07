@@ -5,20 +5,12 @@ import LiteratureDetail from './components/LiteratureDetail'
 import AddEditModal from './components/AddEditModal'
 import CSVImportModal from './components/CSVImportModal'
 import HelpModal from './components/HelpModal'
+import LoadingSpinner from './components/LoadingSpinner'
 import { db } from './utils/db'
+import { litDB } from './utils/supabase'
 
-const STORAGE_KEY = 'refmanager_data'
-
-function loadData() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-  } catch {
-    return []
-  }
-}
-
-export default function App() {
-  const [literatures, setLiteratures] = useState(loadData)
+export default function App({ user, onSignOut }) {
+  const [literatures, setLiteratures] = useState([])
   const [selected, setSelected] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTagFilters, setActiveTagFilters] = useState([])
@@ -26,14 +18,16 @@ export default function App() {
   const [editingLit, setEditingLit] = useState(null)
   const [showCSVModal, setShowCSVModal] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [dataLoading, setDataLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(literatures))
-    } catch {
-      // localStorage quota exceeded — PDFs are in IndexedDB so metadata is small
-    }
-  }, [literatures])
+    litDB.fetchAll(user.id)
+      .then(data => { setLiteratures(data); setDataLoading(false) })
+      .catch(() => { setError('データの読み込みに失敗しました。'); setDataLoading(false) })
+  }, [user.id])
+
+  if (dataLoading) return <LoadingSpinner />
 
   const allTags = [...new Set(literatures.flatMap(l => l.tags || []))]
 
@@ -59,27 +53,46 @@ export default function App() {
     setSelected(prev => prev?.id === updated.id ? updated : prev)
   }
 
-  const handleAdd = lit => {
-    setLiteratures(prev => [lit, ...prev])
-    setSelected(lit)
-    setShowAddModal(false)
+  const handleAdd = async lit => {
+    try {
+      await litDB.insert(lit, user.id)
+      setLiteratures(prev => [lit, ...prev])
+      setSelected(lit)
+      setShowAddModal(false)
+    } catch {
+      setError('文献の追加に失敗しました。')
+    }
   }
 
-  const handleEdit = lit => {
-    updateLit(lit)
-    setEditingLit(null)
+  const handleEdit = async lit => {
+    try {
+      await litDB.update(lit, user.id)
+      updateLit(lit)
+      setEditingLit(null)
+    } catch {
+      setError('文献の更新に失敗しました。')
+    }
   }
 
   const handleDelete = async id => {
     if (!window.confirm('この文献を削除しますか？')) return
-    await db.deletePDF(id)
-    setLiteratures(prev => prev.filter(l => l.id !== id))
-    if (selected?.id === id) setSelected(null)
+    try {
+      await Promise.all([db.deletePDF(id), litDB.remove(id)])
+      setLiteratures(prev => prev.filter(l => l.id !== id))
+      if (selected?.id === id) setSelected(null)
+    } catch {
+      setError('文献の削除に失敗しました。')
+    }
   }
 
-  const handleImportCSV = lits => {
-    setLiteratures(prev => [...lits, ...prev])
-    setShowCSVModal(false)
+  const handleImportCSV = async lits => {
+    try {
+      await litDB.insertMany(lits, user.id)
+      setLiteratures(prev => [...lits, ...prev])
+      setShowCSVModal(false)
+    } catch {
+      setError('CSVの取り込みに失敗しました。')
+    }
   }
 
   return (
@@ -113,8 +126,22 @@ export default function App() {
           >
             + 文献追加
           </button>
+          <button
+            onClick={onSignOut}
+            className="px-3 py-1.5 text-sm text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            ログアウト
+          </button>
         </div>
       </header>
+
+      {/* Error banner */}
+      {error && (
+        <div className="bg-red-50 border-b border-red-200 px-5 py-2 flex items-center justify-between text-sm text-red-700">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">✕</button>
+        </div>
+      )}
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
