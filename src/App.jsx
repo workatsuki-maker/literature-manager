@@ -6,8 +6,7 @@ import AddEditModal from './components/AddEditModal'
 import CSVImportModal from './components/CSVImportModal'
 import HelpModal from './components/HelpModal'
 import LoadingSpinner from './components/LoadingSpinner'
-import { db } from './utils/db'
-import { litDB } from './utils/supabase'
+import { litDB, pdfStorage } from './utils/supabase'
 import { exportToCSV } from './utils/csvExporter'
 
 export default function App({ user, onSignOut }) {
@@ -53,7 +52,7 @@ export default function App({ user, onSignOut }) {
   const handleAdd = async ({ lit, pdfFile }) => {
     try {
       await litDB.insert(lit, user.id)
-      if (pdfFile) await db.savePDF(lit.id, pdfFile)
+      if (pdfFile) await pdfStorage.upload(user.id, lit.id, pdfFile)
       setLiteratures(prev => [lit, ...prev])
       setSelected(lit)
       setShowAddModal(false)
@@ -74,7 +73,7 @@ export default function App({ user, onSignOut }) {
   const handleDelete = async id => {
     if (!window.confirm('この文献を削除しますか？')) return
     try {
-      await Promise.all([db.deletePDF(id), litDB.remove(id)])
+      await Promise.all([pdfStorage.remove(user.id, id), litDB.remove(id)])
       setLiteratures(prev => prev.filter(l => l.id !== id))
       if (selected?.id === id) setSelected(null)
     } catch {
@@ -174,6 +173,7 @@ export default function App({ user, onSignOut }) {
         />
         <LiteratureDetail
           literature={selected}
+          userId={user.id}
           onDelete={handleDelete}
           onUpdate={handleUpdate}
         />

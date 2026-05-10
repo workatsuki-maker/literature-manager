@@ -75,7 +75,8 @@ export default function PDFViewer({ pdfUrl, pdfName, onUpload }) {
         </div>
       )}
       <div className="flex items-center gap-3 px-4 py-2 bg-gray-100 border-b border-gray-200 text-xs text-gray-500 shrink-0">
-        <span className="truncate flex-1">{pdfName || 'PDF'}</span>
+        <span className="font-medium text-gray-500 shrink-0">PDF</span>
+        <span className="truncate flex-1 text-gray-400">{pdfName}</span>
         <label className="cursor-pointer text-blue-500 hover:text-blue-700 shrink-0">
           差し替え
           <input type="file" accept=".pdf" className="hidden" onChange={handleChange} />

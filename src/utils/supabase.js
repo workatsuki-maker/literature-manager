@@ -54,6 +54,26 @@ function toRow(lit, userId) {
   }
 }
 
+export const pdfStorage = {
+  async upload(userId, litId, file) {
+    const path = `${userId}/${litId}.pdf`
+    const { error } = await supabase.storage.from('pdfs').upload(path, file, { upsert: true })
+    if (error) throw error
+  },
+
+  async getSignedUrl(userId, litId) {
+    const path = `${userId}/${litId}.pdf`
+    const { data, error } = await supabase.storage.from('pdfs').createSignedUrl(path, 3600)
+    if (error) return null
+    return data?.signedUrl ?? null
+  },
+
+  async remove(userId, litId) {
+    const path = `${userId}/${litId}.pdf`
+    await supabase.storage.from('pdfs').remove([path])
+  },
+}
+
 export const litDB = {
   async fetchAll(userId) {
     const { data, error } = await supabase

@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import PDFViewer from './PDFViewer'
-import { db } from '../utils/db'
+import { pdfStorage } from '../utils/supabase'
 
 const INPUT_CLASS =
   'w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-transparent bg-white'
 
 const AUTOSAVE_DELAY = 1500
 
-export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
+export default function LiteratureDetail({ literature, userId, onDelete, onUpdate }) {
   const [splitRatio, setSplitRatio] = useState(45)
   const [isDragging, setIsDragging] = useState(false)
   const draggingRef = useRef(false)
@@ -22,27 +22,16 @@ export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
 
   // PDF loading
   useEffect(() => {
-    const state = { cancelled: false, url: null }
-
-    if (!literature?.id) {
+    if (!literature?.id || !literature?.pdfName) {
       setPdfUrl(null)
       return
     }
-
-    db.getPDF(literature.id).then(blob => {
-      if (state.cancelled) return
-      if (!blob) { setPdfUrl(null); return }
-      state.url = URL.createObjectURL(blob)
-      if (state.cancelled) { URL.revokeObjectURL(state.url); return }
-      setPdfUrl(state.url)
+    let cancelled = false
+    pdfStorage.getSignedUrl(userId, literature.id).then(url => {
+      if (!cancelled) setPdfUrl(url)
     })
-
-    return () => {
-      state.cancelled = true
-      if (state.url) URL.revokeObjectURL(state.url)
-      setPdfUrl(null)
-    }
-  }, [literature?.id])
+    return () => { cancelled = true; setPdfUrl(null) }
+  }, [literature?.id, literature?.pdfName, userId])
 
   // Keep literatureRef in sync for use in callbacks
   useEffect(() => { literatureRef.current = literature }, [literature])
@@ -131,9 +120,8 @@ export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
   }
 
   const handlePDFUpload = async file => {
-    await db.savePDF(literature.id, file)
-    if (pdfUrl) URL.revokeObjectURL(pdfUrl)
-    const url = URL.createObjectURL(file)
+    await pdfStorage.upload(userId, literature.id, file)
+    const url = await pdfStorage.getSignedUrl(userId, literature.id)
     setPdfUrl(url)
     onUpdate({ ...literature, pdfName: file.name, updatedAt: Date.now() })
   }
@@ -276,9 +264,6 @@ export default function LiteratureDetail({ literature, onDelete, onUpdate }) {
 
       {/* Right pane: PDF */}
       <div className="flex flex-col overflow-hidden flex-1 relative">
-        <div className="px-4 py-2 border-b border-gray-200 shrink-0">
-          <span className="text-xs font-medium text-gray-500">PDF</span>
-        </div>
         <PDFViewer
           pdfUrl={pdfUrl}
           pdfName={literature.pdfName}
